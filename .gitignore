@@ -1,0 +1,6 @@
+# Pythonのキャッシュ
+**/__pycache__/
+**/*.pyc
+
+# SQLiteのデータベース実ファイル
+backend/database.db

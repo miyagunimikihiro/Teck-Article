@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+# FletをLinux環境で動かすための最小限の依存パッケージ
+RUN apt-get update && apt-get install -y \
+    libgstreamer1.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# FletをWebモード（ポート8502）で起動
+CMD ["flet", "run", "main.py", "--web", "--port", "8502"]
