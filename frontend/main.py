@@ -6,7 +6,7 @@ import os
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
 
 def main(page: ft.Page):
-    page.title = "技術記事収集アプリ - MVP"
+    page.title = "技術記事収集アプリ - 自動収集機能搭載"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 20
 
@@ -33,19 +33,22 @@ def main(page: ft.Page):
             response = requests.get(f"{BACKEND_URL}/articles")
             if response.status_code == 200:
                 articles = response.json()
-                for article in articles:
-                    articles_list.controls.append(
-                        ft.Card(
-                            content=ft.Container(
-                                content=ft.Column([
-                                    ft.Text(article["title"], weight=ft.FontWeight.BOLD, size=16),
-                                    ft.Text(article["url"], color=ft.colors.BLUE_700, size=14),
-                                    ft.Text(f"ソース: {article['source']}", size=12, color=ft.colors.GREY_600)
-                                ]),
-                                padding=10
+                if not articles:
+                    articles_list.controls.append(ft.Text("収集された記事はまだありません。"))
+                else:
+                    for article in reversed(articles):
+                        articles_list.controls.append(
+                            ft.Card(
+                                content=ft.Container(
+                                    content=ft.Column([
+                                        ft.Text(article["title"], weight=ft.FontWeight.BOLD, size=16),
+                                        ft.Text(article["url"], color=ft.colors.BLUE_700, size=14),
+                                        ft.Text(f"ソース: {article['source']}", size=12, color=ft.colors.GREY_600)
+                                    ]),
+                                    padding=10
+                                )
                             )
                         )
-                    )
             else:
                 articles_list.controls.append(ft.Text("データの取得に失敗しました。"))
         except Exception as e:
@@ -53,7 +56,7 @@ def main(page: ft.Page):
         
         page.update()
 
-    # 記事を登録するボタンのイベントハンドラ
+    # 記事を手動で登録するボタンのイベントハンドラ
     def add_article_click(e):
         if not title_input.value or not url_input.value:
             page.snack_bar = ft.SnackBar(ft.Text("タイトルとURLを入力してください。"))
@@ -89,14 +92,44 @@ def main(page: ft.Page):
             page.snack_bar.open = True
         
         page.update()
+    
+    # RSS一括取得ボタンのイベントハンドラ
+    def fetch_rss_click(e):
+        fetch_rss_button.disabled = True
+        fetch_rss_button.text = "RSSフィードを取得中..."
+        page.update()
+
+        try:
+            response = requests.post(f"{BACKEND_URL}/articles/fetch-rss")
+            if response.status_code == 200:
+                result = response.json()
+                page.snack_bar = ft.SnackBar(ft.Text(result["message"]))
+                page.snack_bar.open = True
+                refresh_articles()
+            else:
+                page.snack_bar = ft.SnackBar(ft.Test("RSSフィードの取得に失敗しました"))
+                page.snack_bar.open = True
+        except Exception as ex:
+            page.snack_bar = ft.SnackBar(ft.Text(f"通信エラー: {ex}"))
+            page.snack_bar.open = True
+        
+        fetch_rss_button.disabled = False
+        fetch_rss_button.text = "最新記事を自動収集"
+        page.update()
+
 
     # 登録ボタン
     add_button = ft.ElevatedButton("記事を追加", on_click=add_article_click)
+    fetch_rss_button = ft.FilledButton("最新記事を自動収集", on_click=fetch_rss_click,icon=ft.icons.DOWNLOAD)
 
     # 画面レイアウトの組み立て
     page.add(
         ft.Column([
+            ft.Row([
             ft.Text("技術記事収集アプリケーション (MVP)", size=24, weight=ft.FontWeight.BOLD),
+            fetch_rss_button]
+            ,alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+        ),
             ft.Divider(),
             ft.Text("新しい記事の登録", size=18, weight=ft.FontWeight.BOLD),
             ft.Row([title_input, url_input, source_dropdown, add_button], wrap=True),
