@@ -4,6 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import datetime
 import os
+import feedparser
 
 # 1. データベースの設定
 DATABASE_URL = "sqlite:////app/database.db"
@@ -58,3 +59,43 @@ def create_article(title: str, url: str, source: str, db: Session = Depends(get_
     db.commit()
     db.refresh(new_article)
     return new_article
+
+
+#RSSフィードのURL定義
+RSS_URLS = {
+    "Qiita": "https://qiita.com/tags/python/feed.atom",
+    "Zenn": "https://zenn.dev/feed"
+}
+
+@app.post("/articles/fetch-rss")
+def fetch_rss_articles(db: Session = Depends(get_db)):
+    """
+    QiitaとZennのRSSフィードを解析し、未登録の記事をデータベースに自動保存するAPI
+    """
+    added_count = 0
+    for source, url in RSS_URLS.items():
+        feed = feedparser.parse(url)
+        for entry in feed.entries:
+            title = entry.get("title")
+            link = entry.get("link")
+
+            if not title or not link:
+                continue  # タイトルやURLがない場合はスキップ
+
+            existing_article = db.query(Article).filter(Article.url == link).first()
+            if existing_article:
+                continue  # 既に登録されている記事はスキップ
+
+            new_article = Article(
+                title=title,
+                url=link,
+                source= source
+            )
+            db.add(new_article)
+            added_count += 1
+    if added_count > 0:
+        db.commit()
+    return {
+        "status": "success",
+        "message": f"RSSフィード〜新しい記事を{added_count}件登録しました。"
+    }
