@@ -6,7 +6,7 @@ import os
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
 
 def main(page: ft.Page):
-    page.title = "技術記事収集アプリ - 自動収集機能搭載"
+    page.title = "技術記事収集アプリ - 選択式フィルター搭載"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 20
 
@@ -26,11 +26,38 @@ def main(page: ft.Page):
     
     articles_list = ft.ListView(expand=1, spacing=10, padding=20)
 
+    #キーワードの選択用のドロップダウン
+    # 選択が切り替わったときに、自動で「keyword_filter_changde」が呼び出される設定
+    keyword_filter = ft.Dropdown(
+        label="キーワードで絞り込む",
+        width=200,
+        options=[
+            ft.dropdown.Option("すべて"),
+            ft.dropdown.Option("python"),
+            ft.dropdown.Option("Docker"),
+            ft.dropdown.Option("JavaScript"),
+            ft.dropdown.Option("AI"),
+
+        ],
+        value="すべて"
+    )
+
+    # ドロップダウンの値が変更されたときのイベントハンドラ
+    def keyword_filter_changed(e):
+        refresh_articles(keyword=keyword_filter.value)
+    
+    # 関数のイベント紐づけ
+    keyword_filter.on_change = keyword_filter_changed
+
     # 記事一覧をバックエンドから取得して再描画する関数
-    def refresh_articles():
+    def refresh_articles(keyword = None):
         articles_list.controls.clear()
         try:
-            response = requests.get(f"{BACKEND_URL}/articles")
+            params = {}
+            if keyword and keyword != "すべて":
+                params["keyword"] = keyword
+
+            response = requests.get(f"{BACKEND_URL}/articles", params=params)
             if response.status_code == 200:
                 articles = response.json()
                 if not articles:
@@ -55,6 +82,8 @@ def main(page: ft.Page):
             articles_list.controls.append(ft.Text(f"サーバーに接続できません: {e}"))
         
         page.update()
+    
+    
 
     # 記事を手動で登録するボタンのイベントハンドラ
     def add_article_click(e):
@@ -82,7 +111,7 @@ def main(page: ft.Page):
                 # 入力フォームをクリア
                 title_input.value = ""
                 url_input.value = ""
-                refresh_articles()  # 一覧を更新
+                refresh_articles(keyword=keyword_filter.value)  # 一覧を更新
             else:
                 error_detail = response.json().get("detail", "登録に失敗しました。")
                 page.snack_bar = ft.SnackBar(ft.Text(f"エラー: {error_detail}"))
@@ -105,7 +134,7 @@ def main(page: ft.Page):
                 result = response.json()
                 page.snack_bar = ft.SnackBar(ft.Text(result["message"]))
                 page.snack_bar.open = True
-                refresh_articles()
+                refresh_articles(keyword=keyword_filter.value)
             else:
                 page.snack_bar = ft.SnackBar(ft.Test("RSSフィードの取得に失敗しました"))
                 page.snack_bar.open = True
@@ -126,20 +155,23 @@ def main(page: ft.Page):
     page.add(
         ft.Column([
             ft.Row([
-            ft.Text("技術記事収集アプリケーション (MVP)", size=24, weight=ft.FontWeight.BOLD),
+            ft.Text("技術記事収集アプリケーション ", size=24, weight=ft.FontWeight.BOLD),
             fetch_rss_button]
             ,alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-        ),
+            ),
             ft.Divider(),
             ft.Text("新しい記事の登録", size=18, weight=ft.FontWeight.BOLD),
             ft.Row([title_input, url_input, source_dropdown, add_button], wrap=True),
             ft.Divider(),
+            ft.Row([
             ft.Text("収集された記事一覧", size=18, weight=ft.FontWeight.BOLD),
+            keyword_filter],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             articles_list
         ], expand=True)
     )
 
     # 初期表示時に記事一覧を読み込む
-    refresh_articles()
+    refresh_articles(keyword=keyword_filter.value)
 
 ft.app(target=main)
