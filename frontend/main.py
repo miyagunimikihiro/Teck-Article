@@ -32,23 +32,12 @@ def main(page: ft.Page):
         label="キーワードで絞り込む",
         width=200,
         options=[
-            ft.dropdown.Option("すべて"),
-            ft.dropdown.Option("python"),
-            ft.dropdown.Option("Docker"),
-            ft.dropdown.Option("JavaScript"),
-            ft.dropdown.Option("AI"),
-
+            ft.dropdown.Option("すべて")
         ],
         value="すべて"
     )
 
-    # ドロップダウンの値が変更されたときのイベントハンドラ
-    def keyword_filter_changed(e):
-        refresh_articles(keyword=keyword_filter.value)
     
-    # 関数のイベント紐づけ
-    keyword_filter.on_change = keyword_filter_changed
-
     # 記事一覧をバックエンドから取得して再描画する関数
     def refresh_articles(keyword = None):
         articles_list.controls.clear()
@@ -83,7 +72,32 @@ def main(page: ft.Page):
         
         page.update()
     
+    # ドロップダウンの値が変更されたときのイベントハンドラ
+    def keyword_filter_changed(e):
+        refresh_articles(keyword=keyword_filter.value)
     
+    # 関数のイベント紐づけ
+    keyword_filter.on_change = keyword_filter_changed
+
+    #バックエンドから最新のタグリストを取得して、キーワードフィルターの選択肢を更新する関数
+    def load_dynamic_tags():
+        try:
+            response = requests.get(f"{BACKEND_URL}/tags")
+            if response.status_code == 200:
+                tags = response.json()
+                keyword_filter.options.clear()
+                for tag in tags:
+                    keyword_filter.options.append(ft.dropdown.Option(tag))
+                keyword_filter.value = "すべて"
+        except Exception as e:
+            print(f"タグの動的取得に失敗: {e}")
+            keyword_filter.options = [
+                ft.dropdown.Option("すべて"),
+                ft.dropdown.Option("Python"),
+                ft.dropdown.Option("JavaScript"),
+                ft.dropdown.Option("Go"),
+                ft.dropdown.Option("Ruby")
+            ]
 
     # 記事を手動で登録するボタンのイベントハンドラ
     def add_article_click(e):
@@ -172,6 +186,7 @@ def main(page: ft.Page):
     )
 
     # 初期表示時に記事一覧を読み込む
+    load_dynamic_tags()  # タグの動的取得
     refresh_articles(keyword=keyword_filter.value)
 
 ft.app(target=main)
