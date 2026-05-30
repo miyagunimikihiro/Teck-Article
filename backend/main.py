@@ -43,8 +43,12 @@ def read_root():
 
 # 記事一覧を取得するAPI
 @app.get("/articles")
-def get_articles(db: Session = Depends(get_db)):
-    articles = db.query(Article).all()
+def get_articles(keyword: str = None, db: Session = Depends(get_db)):
+    query = db.query(Article)
+
+    if keyword and keyword != "すべて":
+        query = query.filter(Article.title.like(f"%{keyword}%"))
+    articles = query.all()
     return articles
 
 # 記事を手動で登録するAPI
