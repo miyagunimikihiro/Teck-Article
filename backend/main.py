@@ -21,6 +21,7 @@ class Article(Base):
     title = Column(String, nullable=False)
     url = Column(String, unique=True, nullable=False)
     source = Column(String, nullable=False)  # 例: Qiita, Zenn
+    tags = Column(String, nullable=True)  # カンマ区切りのタグリスト
     published_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 # テーブルの自動生成（ファイルがなければここで database.db が作られる）
@@ -54,12 +55,12 @@ def get_articles(keyword: str = None, db: Session = Depends(get_db)):
 
 # 記事を手動で登録するAPI
 @app.post("/articles")
-def create_article(title: str, url: str, source: str, db: Session = Depends(get_db)):
+def create_article(title: str, url: str, source: str, tags: str = None, db: Session = Depends(get_db)):
     db_article = db.query(Article).filter(Article.url == url).first()
     if db_article:
         raise HTTPException(status_code=400, detail="Article already registered")
     
-    new_article = Article(title=title, url=url, source=source)
+    new_article = Article(title=title, url=url, source=source, tags=tags)
     db.add(new_article)
     db.commit()
     db.refresh(new_article)
@@ -91,10 +92,21 @@ def fetch_rss_articles(db: Session = Depends(get_db)):
             if existing_article:
                 continue  # 既に登録されている記事はスキップ
 
+            tag_list = []
+            if source == "Qiita":
+                if "tags" in entry:
+                    tag_list = [t.get("term") for t in entry.tags if t.get("term")]
+            elif source == "Zenn":
+                if "tags" in entry:
+                    tag_list = [c for c in entry.categories if c]
+                
+            tags_str = ",".join(tag_list) if tag_list else None
+
             new_article = Article(
                 title=title,
                 url=link,
-                source= source
+                source= source,
+                tags = tags_str
             )
             db.add(new_article)
             added_count += 1
@@ -128,3 +140,20 @@ def get_trending_tags():
     
     except Exception:
         return ["すべて","Python", "JavaScript", "Go", "Ruby"]  # デフォルトのキーワードリスト
+    
+@app.get("/articles")
+def get_articles(keyword: str = None, db: Session = Depends(get_db)):
+    query = db.query(Article)
+
+    if keyword and keyword != "すべて":
+        if keyword == "Zennトレンド":
+            query = query.filter(Article.source == "Zenn")
+        else:
+            # タイトル、または新設したtagsカラムにキーワードが含まれるものをOR条件で検索
+            query = query.filter(
+                (Article.title.like(f"%{keyword}%)")) |
+                (Article.tags.like(f"%{keyword}%)")) 
+            )
+    return query.all()
+
+
