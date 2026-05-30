@@ -6,13 +6,14 @@ import os
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
 
 def main(page: ft.Page):
-    page.title = "技術記事収集アプリ - 選択式フィルター搭載"
+    page.title = "技術記事収集アプリ - タグ表示機能追加"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 20
 
     # UI要素の定義
     title_input = ft.TextField(label="記事タイトル", width=300)
     url_input = ft.TextField(label="URL", width=400)
+    tags_input = ft.TextField(label="タグ（カンマ区切り）", width=400)
     source_dropdown = ft.Dropdown(
         label="情報源",
         width=150,
@@ -53,13 +54,30 @@ def main(page: ft.Page):
                     articles_list.controls.append(ft.Text("収集された記事はまだありません。"))
                 else:
                     for article in reversed(articles):
+                        # タグを表示するためのテキストを作成
+                        tag_chips = []
+                        if article.get("tags"):
+                            tag_names = article["tags"].split(",")
+                            for name in tag_names:
+                                if name.strip():
+                                    tag_chips.append(
+                                        ft.Chip(
+                                            label=ft.Text(name.strip(),size=11),
+                                            bgcolor=ft.colors.BLUE_50,
+                                            disabled=True
+                                        )
+                                    )
+                                
                         articles_list.controls.append(
                             ft.Card(
                                 content=ft.Container(
                                     content=ft.Column([
                                         ft.Text(article["title"], weight=ft.FontWeight.BOLD, size=16),
                                         ft.Text(article["url"], color=ft.colors.BLUE_700, size=14),
-                                        ft.Text(f"ソース: {article['source']}", size=12, color=ft.colors.GREY_600)
+                                        ft.Row([
+                                        ft.Text(f"ソース: {article['source']}", size=12, color=ft.colors.GREY_600),
+                                        ft.Row(tag_chips, spacing=5) if tag_chips else ft.Container()
+                                        ], alignment=ft.MainAxisAlignment.START, wrap=True)
                                     ]),
                                     padding=10
                                 )
@@ -102,7 +120,7 @@ def main(page: ft.Page):
     # 記事を手動で登録するボタンのイベントハンドラ
     def add_article_click(e):
         if not title_input.value or not url_input.value:
-            page.snack_bar = ft.SnackBar(ft.Text("タイトルとURLを入力してください。"))
+            page.snack_bar = ft.SnackBar(ft.Text("タイトルとURLとを入力してください。"))
             page.snack_bar.open = True
             page.update()
             return
@@ -110,6 +128,7 @@ def main(page: ft.Page):
         payload = {
             "title": title_input.value,
             "url": url_input.value,
+            "tags": tags_input.value,
             "source": source_dropdown.value
         }
         
@@ -125,6 +144,7 @@ def main(page: ft.Page):
                 # 入力フォームをクリア
                 title_input.value = ""
                 url_input.value = ""
+                tags_input.value = ""
                 refresh_articles(keyword=keyword_filter.value)  # 一覧を更新
             else:
                 error_detail = response.json().get("detail", "登録に失敗しました。")
@@ -175,7 +195,7 @@ def main(page: ft.Page):
             ),
             ft.Divider(),
             ft.Text("新しい記事の登録", size=18, weight=ft.FontWeight.BOLD),
-            ft.Row([title_input, url_input, source_dropdown, add_button], wrap=True),
+            ft.Row([title_input, url_input, tags_input, source_dropdown, add_button], wrap=True),
             ft.Divider(),
             ft.Row([
             ft.Text("収集された記事一覧", size=18, weight=ft.FontWeight.BOLD),
