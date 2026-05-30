@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker, Session
 import datetime
 import os
 import feedparser
+import requests
 
 # 1. データベースの設定
 DATABASE_URL = "sqlite:////app/database.db"
@@ -103,3 +104,27 @@ def fetch_rss_articles(db: Session = Depends(get_db)):
         "status": "success",
         "message": f"RSSフィード〜新しい記事を{added_count}件登録しました。"
     }
+
+@app.get("/tags")
+def get_trending_tags():
+    """
+    Qiitaの公式APIから投稿数の多いタグを取得し、絞り込み用のキーワードリストとして返す
+    """
+    try:
+        "Qiitaのタグ一覧API"
+        qiita_tags_url = "https://qiita.com/api/v2/tags?page=1&per_page=10&sort=count"
+        headers = {"User-Agent": "TechArticleAggregatorApp/1.0"}
+
+        response = requests.get(qiita_tags_url,headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            tags_data = response.json()
+            # タグのIDを抽出してキーワードリストを作成
+            keywords = [tag["id"] for tag in tags_data]
+
+            return ["すべて","Zennトレンド"] + keywords
+        else:
+            return ["すべて","Python", "JavaScript", "Go", "Ruby"]  # デフォルトのキーワードリスト
+    
+    except Exception:
+        return ["すべて","Python", "JavaScript", "Go", "Ruby"]  # デフォルトのキーワードリスト
