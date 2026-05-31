@@ -49,9 +49,15 @@ def get_articles(keyword: str = None, db: Session = Depends(get_db)):
     query = db.query(Article)
 
     if keyword and keyword != "すべて":
-        query = query.filter(Article.title.like(f"%{keyword}%"))
-    articles = query.all()
-    return articles
+        if keyword == "Zennトレンド":
+            query = query.filter(Article.source == "Zenn")
+        else:
+            # タイトル、または新設したtagsカラムにキーワードが含まれるものをOR条件で検索
+            query = query.filter(
+                (Article.title.like(f"%{keyword}%")) |
+                (Article.tags.like(f"%{keyword}%")) 
+            )
+    return query.all()
 
 # 記事を手動で登録するAPI
 @app.post("/articles")
@@ -67,11 +73,6 @@ def create_article(title: str, url: str, source: str, tags: str = None, db: Sess
     return new_article
 
 
-#RSSフィードのURL定義
-RSS_URLS = {
-    "Qiita": "https://qiita.com/tags/python/feed.atom",
-    "Zenn": "https://zenn.dev/feed"
-}
 
 @app.post("/articles/fetch-rss")
 def fetch_rss_articles(db: Session = Depends(get_db)):
@@ -79,43 +80,75 @@ def fetch_rss_articles(db: Session = Depends(get_db)):
     QiitaとZennのRSSフィードを解析し、未登録の記事をデータベースに自動保存するAPI
     """
     added_count = 0
-    for source, url in RSS_URLS.items():
-        feed = feedparser.parse(url)
-        for entry in feed.entries:
+    header = {"User-Agent": "TechArticleAggregatorApp/1.0"}
+    #============ Qiita 公式APIから記事を取得して保存する処理 ============
+    try:
+        qiita_api_url = "http://qiita.com/api/v2/items"
+        params = {
+            "page":1,
+            "per_page":10,
+            "query":"stock:>5"
+        }
+        qiita_response = requests.get(qiita_api_url, params=params,headers=header, timeout=5)
+
+        if qiita_response.status_code == 200:
+            qiita_items = qiita_response.json()
+            for item in qiita_items:
+                title = item.get("title")
+                link = item.get("url")
+                if not title or not link:
+                    continue
+
+                existing = db.query(Article).filter(Article.url == link).first()
+                if existing:
+                    continue
+
+                raw_tags = item.get("tags", [])
+                tag_names = [t.get("name") for t in raw_tags if t.get("name")]
+                tags_str = ",".join(tag_names) if tag_names else None
+
+                new_article = Article(title=title, url=link, source="Qiita", tags=tags_str)
+                db.add(new_article)
+                added_count += 1
+        else:
+            print(f"Qiita API error: {qiita_response.status_code}")
+        
+    except Exception as e:
+        print(f"Qiita API通信エラー: {e}")
+
+    #============ ZennのRSSフィードから記事を取得して保存する処理 ============
+    try:
+        zenn_feed = feedparser.parse("https://zenn.dev/feed")
+        for entry in zenn_feed.entries:
             title = entry.get("title")
             link = entry.get("link")
 
             if not title or not link:
-                continue  # タイトルやURLがない場合はスキップ
+                continue
 
-            existing_article = db.query(Article).filter(Article.url == link).first()
-            if existing_article:
-                continue  # 既に登録されている記事はスキップ
+            existing = db.query(Article).filter(Article.url == link).first()
+            if existing:
+                continue
 
             tag_list = []
-            if source == "Qiita":
-                if "tags" in entry:
-                    tag_list = [t.get("term") for t in entry.tags if t.get("term")]
-            elif source == "Zenn":
-                if "tags" in entry:
-                    tag_list = [c for c in entry.categories if c]
-                
+            raw_categories = entry.get("categories")
+            if raw_categories:
+                tag_list = [c for c in raw_categories if c]
             tags_str = ",".join(tag_list) if tag_list else None
 
-            new_article = Article(
-                title=title,
-                url=link,
-                source= source,
-                tags = tags_str
-            )
+            new_article = Article(title=title, url=link, source="Zenn", tags=tags_str)
             db.add(new_article)
             added_count += 1
+    except Exception as e:
+        print(f"Zenn RSS通信エラー: {e}")
+    
+    #========データベースに保存する===========
     if added_count > 0:
         db.commit()
     return {
         "status": "success",
-        "message": f"RSSフィード〜新しい記事を{added_count}件登録しました。"
-    }
+        "message": f"Qiita人気記事およびZenn新着記事から{added_count}件の記事を追加しました。"}
+
 
 @app.get("/tags")
 def get_trending_tags():
@@ -141,19 +174,3 @@ def get_trending_tags():
     except Exception:
         return ["すべて","Python", "JavaScript", "Go", "Ruby"]  # デフォルトのキーワードリスト
     
-@app.get("/articles")
-def get_articles(keyword: str = None, db: Session = Depends(get_db)):
-    query = db.query(Article)
-
-    if keyword and keyword != "すべて":
-        if keyword == "Zennトレンド":
-            query = query.filter(Article.source == "Zenn")
-        else:
-            # タイトル、または新設したtagsカラムにキーワードが含まれるものをOR条件で検索
-            query = query.filter(
-                (Article.title.like(f"%{keyword}%)")) |
-                (Article.tags.like(f"%{keyword}%)")) 
-            )
-    return query.all()
-
-
