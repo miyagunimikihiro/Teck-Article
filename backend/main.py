@@ -38,6 +38,27 @@ def get_db():
     finally:
         db.close()
 
+#　タイトルからキーワードを自動抽出してタグを生成する
+def guess_tags_from_title(title: str):
+    if not title:
+        return None
+    
+    target_keyword = [
+        "Python", "FastAPI", "Docker", "JavaScript", "TypeScript", 
+        "React", "Next.js", "Vue.js", "Go", "Rust", "Ruby", "Rails", 
+        "AWS", "GCP", "Git", "GitHub", "AI", "LLM", "ChatGPT"
+    ]
+
+    matched_tags = []
+    title_lower = title.lower()
+
+    for kw in target_keyword:
+        if kw.lower() in title_lower:
+            matched_tags.append(kw)
+    return ",".join(matched_tags) if matched_tags else None
+
+
+
 # 4. APIエンドポイント（動作確認用のテスト用）
 @app.get("/")
 def read_root():
@@ -65,6 +86,9 @@ def create_article(title: str, url: str, source: str, tags: str = None, db: Sess
     db_article = db.query(Article).filter(Article.url == url).first()
     if db_article:
         raise HTTPException(status_code=400, detail="Article already registered")
+
+    if not tags:
+        tags = guess_tags_from_title(title)
     
     new_article = Article(title=title, url=url, source=source, tags=tags)
     db.add(new_article)
@@ -130,11 +154,7 @@ def fetch_rss_articles(db: Session = Depends(get_db)):
             if existing:
                 continue
 
-            tag_list = []
-            raw_categories = entry.get("categories")
-            if raw_categories:
-                tag_list = [c for c in raw_categories if c]
-            tags_str = ",".join(tag_list) if tag_list else None
+            tags_str = guess_tags_from_title(title)
 
             new_article = Article(title=title, url=link, source="Zenn", tags=tags_str)
             db.add(new_article)
