@@ -62,9 +62,8 @@ def main(page: ft.Page):
                                 if name.strip():
                                     tag_chips.append(
                                         ft.Chip(
-                                            label=ft.Text(name.strip(),size=11),
-                                            bgcolor=ft.colors.BLUE_50,
-                                            disabled=True
+                                            label=ft.Text(name.strip(),size=15, color = ft.colors.BLUE_700, weight=ft.FontWeight.BOLD),
+                                            bgcolor=ft.colors.BLUE_50
                                         )
                                     )
                                 
